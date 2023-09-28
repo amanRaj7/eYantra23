@@ -225,8 +225,8 @@ class swift():
 		#self.cmd.rcThrottle = int(1550 + self.error[2]*self.Kp[2] + (self.error[2] - self.prev_alt_error)*self.Kd[2] + self.sum_alt_error*self.Ki[2])
 		
 
-		self.cmd.rcRoll     = int(1550 - ((self.Kp[0] * self.error[0]) + (self.integral[0]) + (self.Kd[0] * self.derivative[0])))
-		self.cmd.rcPitch    = int(1550 + ((self.Kp[1] * self.error[1]) + (self.integral[1]) + (self.Kd[1] * self.derivative[1])))
+		self.cmd.rcRoll     = int(1500 - ((self.Kp[0] * self.error[0]) + (self.integral[0]) + (self.Kd[0] * self.derivative[0])))
+		self.cmd.rcPitch    = int(1500 + ((self.Kp[1] * self.error[1]) + (self.integral[1]) + (self.Kd[1] * self.derivative[1])))
 		self.cmd.rcThrottle = int(1550 + ((self.Kp[2] * self.error[2]) + (self.integral[2]) + (self.Kd[2] * self.derivative[2])))
 
 
