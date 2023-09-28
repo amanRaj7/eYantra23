@@ -71,19 +71,19 @@ class swift():
 
 		#to be done
 
-
+				# roll, pitch, throttle
 		self.Kp = [0, 0, 0]
-		self.Ki = [0, 0, 0]
-		self.Kd = [0, 0, 0]
+		self.Ki = [0.0, 0.0, 0.0]
+		self.Kd = [0, 0, 0.0]
    
 		#-----------------------Add other required variables for pid here ----------------------------------------------
 		
-			              # roll, pitch, throttle/altitude
+			            # roll, pitch, throttle
 		self.prev_error = [0.0, 0.0, 0.0]
 		self.sum_error =  [0.0, 0.0, 0.0]
 
-		self.min_values = [1000,1000,1000]
-		self.max_values = [2000,2000,2000]
+		self.min_values = [1350,1350,1350]
+		self.max_values = [1700,1700,1750]
 
 		self.derivative = [0.0, 0.0, 0.0]
 		self.integral = [0.0, 0.0, 0.0]
@@ -128,11 +128,7 @@ class swift():
 
 	# Disarming condition of the drone
 	def disarm(self):
-		#self.cmd.rcRoll = 1500
-		#self.cmd.rcYaw = 1500
-		#self.cmd.rcPitch = 1500
-		#self.cmd.rcThrottle = 1000
-		self.cmd.rcAUX4 = 1100 #check for 1000
+		self.cmd.rcAUX4 = 1100
 		self.command_pub.publish(self.cmd)
 		rospy.sleep(1)
 
@@ -165,7 +161,7 @@ class swift():
 	# This function gets executed each time when /tune_pid publishes /pid_tuning_altitude
 	def altitude_set_pid(self,alt):
 		self.Kp[2] = alt.Kp * 0.1 # This is just for an example. You can change the ratio/fraction value accordingly
-		self.Ki[2] = alt.Ki * 0.001
+		self.Ki[2] = alt.Ki * 0.0005
 		self.Kd[2] = alt.Kd * 0.5
 		
 	#----------------------------Define callback function like altitide_set_pid to tune pitch, roll--------------
@@ -176,7 +172,7 @@ class swift():
 
 	def roll_set_pid(self,roll):
 		self.Kp[0] = roll.Kp * 0.01
-		self.Ki[0] = roll.Ki * 0.001
+		self.Ki[0] = roll.Ki * 0.0001
 		self.Kd[0] = roll.Kd * 0.5
 
 	#----------------------------------------------------------------------------------------------------------------------
@@ -221,13 +217,13 @@ class swift():
 		self.derivative[1] = (self.error[1] - self.prev_error[1])
 		self.derivative[2] = (self.error[2] - self.prev_error[2])
 
-
-		#self.cmd.rcThrottle = int(1550 + self.error[2]*self.Kp[2] + (self.error[2] - self.prev_alt_error)*self.Kd[2] + self.sum_alt_error*self.Ki[2])
-		
+		self.sum_error[0] += self.error[0]
+		self.sum_error[1] += self.error[1]
+		self.sum_error[2] += self.error[2]			
 
 		self.cmd.rcRoll     = int(1500 - ((self.Kp[0] * self.error[0]) + (self.integral[0]) + (self.Kd[0] * self.derivative[0])))
 		self.cmd.rcPitch    = int(1500 + ((self.Kp[1] * self.error[1]) + (self.integral[1]) + (self.Kd[1] * self.derivative[1])))
-		self.cmd.rcThrottle = int(1550 + ((self.Kp[2] * self.error[2]) + (self.integral[2]) + (self.Kd[2] * self.derivative[2])))
+		self.cmd.rcThrottle = int(1500 + ((self.Kp[2] * self.error[2]) + (self.integral[2]) + (self.Kd[2] * self.derivative[2])))
 
 
  		# limiting the values
@@ -255,9 +251,6 @@ class swift():
 		
 		# updating the errors
 
-		self.sum_error[0] += self.error[0]
-		self.sum_error[1] += self.error[1]
-		self.sum_error[2] += self.error[2]			
 
 		self.prev_error = self.error
 
