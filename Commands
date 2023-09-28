@@ -20,4 +20,6 @@ rosrun pid_tune pid_tune_drone.py
 rosrun luminosity_drone position_hold.py
 roslaunch luminosity_drone task_1.launch
 
+RUN ALL THESE COMMANDS IN SEPARATE BUT WINDOWS.. MAKE SURE YOU FIRST CD CATKIN_WS IF NOT DONE
+ 
 PUT position_hold.py in /catkin_ws/src/luminosity_drone/luminosity_drone/scripts/position_hold.py
