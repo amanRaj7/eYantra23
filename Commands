@@ -1,0 +1,23 @@
+rosnode list
+rostopic list
+rost tab tab
+rostopic tab tab
+rostopic info /drone_command
+
+fly
+
+rostopic pub /drone_command swift_msgs/swift_msgs "{rcRoll: 1500, rcPitch: 1500, rcYaw: 1500, rcThrottle: 1590, rcAUX1: 0, rcAUX2: 0, rcAUX3: 0, rcAUX4: 1500}"
+
+stop
+
+Kp  Ki Kd
+197 4 634
+
+
+-------------------++++++++++++++++++++----------------------------MAIN COMMANDS
+roslaunch plotjuggler_ros plotjuggler.launch 
+rosrun pid_tune pid_tune_drone.py 
+rosrun luminosity_drone position_hold.py
+roslaunch luminosity_drone task_1.launch
+
+PUT position_hold.py in /catkin_ws/src/luminosity_drone/luminosity_drone/scripts/position_hold.py
