@@ -8,7 +8,7 @@ import os
 # load the image
 
 # Define the absolute path to the image
-image_path = '/home/pratyush/catkin_ws/src/luminosity_drone/luminosity_drone/scripts/sample.jpg'
+image_path = '/home/pratyush/catkin_ws/src/luminosity_drone/luminosity_drone/scripts/sample.jpg'  #change your folder accordingly
 
 # Check if the image file exists
 if not os.path.exists(image_path):
@@ -17,7 +17,9 @@ if not os.path.exists(image_path):
 
 # Load the image
 image = cv.imread(image_path, 1)
-#
+
+# i dont know why this image read doesn't work directly check and tell if it works with you
+
 #image = cv.imread('/scripts/led.jpg', 1)
 #image_path = os.path.abspath('led.jpg')
 
