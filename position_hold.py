@@ -72,9 +72,9 @@ class swift():
 		#to be done
 
 				# roll, pitch, throttle
-		self.Kp = [0, 0, 0]
-		self.Ki = [0.0, 0.0, 0.0]
-		self.Kd = [0, 0, 0.0]
+		self.Kp = [ 30.78  , 34.5 , 63.2]
+		self.Ki = [ 0.0008 , 0    ,0.0826]
+		self.Kd = [ 600.5  , 579  , 655]
    
 		#-----------------------Add other required variables for pid here ----------------------------------------------
 		
@@ -82,8 +82,8 @@ class swift():
 		self.prev_error = [0.0, 0.0, 0.0]
 		self.sum_error =  [0.0, 0.0, 0.0]
 
-		self.min_values = [1350,1350,1350]
-		self.max_values = [1700,1700,1750]
+		self.min_values = [1350,1350,1000]
+		self.max_values = [1700,1700,2000]
 
 		self.derivative = [0.0, 0.0, 0.0]
 		self.integral = [0.0, 0.0, 0.0]
@@ -119,7 +119,6 @@ class swift():
 		#-------------------------Add other ROS Subscribers here----------------------------------------------------
 		rospy.Subscriber('/pid_tuning_pitch',PidTune,self.pitch_set_pid)
 		rospy.Subscriber('/pid_tuning_roll',PidTune,self.roll_set_pid)
-		#rospy.Subscriber('/decision_info',SRInfo,self.decision_callback)
 
 		#------------------------------------------------------------------------------------------------------------
 
@@ -128,6 +127,10 @@ class swift():
 
 	# Disarming condition of the drone
 	def disarm(self):
+		self.cmd.rcRoll = 1500
+		self.cmd.rcYaw = 1500
+		self.cmd.rcPitch = 1500
+		self.cmd.rcThrottle = 1000
 		self.cmd.rcAUX4 = 1100
 		self.command_pub.publish(self.cmd)
 		rospy.sleep(1)
@@ -160,20 +163,20 @@ class swift():
 	# Callback function for /pid_tuning_altitude
 	# This function gets executed each time when /tune_pid publishes /pid_tuning_altitude
 	def altitude_set_pid(self,alt):
-		self.Kp[2] = alt.Kp * 0.1 # This is just for an example. You can change the ratio/fraction value accordingly
-		self.Ki[2] = alt.Ki * 0.0005
-		self.Kd[2] = alt.Kd * 0.5
+		self.Kp[2] =   alt.Kp * 0.1 # This is just for an example. You can change the ratio/fraction value accordingly
+		self.Ki[2] =   alt.Ki * 0.0007
+		self.Kd[2] =   alt.Kd * 0.5
 		
 	#----------------------------Define callback function like altitide_set_pid to tune pitch, roll--------------
 	def pitch_set_pid(self,pitch):
 		self.Kp[1] = pitch.Kp * 0.01
-		self.Ki[1] = pitch.Ki * 0.001
+		self.Ki[1] = pitch.Ki * 0.0005
 		self.Kd[1] = pitch.Kd * 0.5	
 
 	def roll_set_pid(self,roll):
-		self.Kp[0] = roll.Kp * 0.01
-		self.Ki[0] = roll.Ki * 0.0001
-		self.Kd[0] = roll.Kd * 0.5
+		self.Kp[0] =  roll.Kp * 0.03
+		self.Ki[0] =  roll.Ki * 0.00005
+		self.Kd[0] =  roll.Kd * 0.5
 
 	#----------------------------------------------------------------------------------------------------------------------
 
@@ -192,12 +195,12 @@ class swift():
 	#	7. Update previous errors.eg: self.prev_error[1] = error[1] where index 1 corresponds to that of pitch (eg)
 	#	8. Add error_sum
 
-
+		
 		# creating reference lines on the plot
 		self.zero_line = 0.00
 		self.minus_one_line = -1
-		self.minus_half_line = -0.50
-		self.plus_half_line = 0.500
+		self.minus_half_line = -0.2
+		self.plus_half_line = 0.2
 		self.plus_one_line = 1.00
 
 		# calculating errors
@@ -223,8 +226,9 @@ class swift():
 
 		self.cmd.rcRoll     = int(1500 - ((self.Kp[0] * self.error[0]) + (self.integral[0]) + (self.Kd[0] * self.derivative[0])))
 		self.cmd.rcPitch    = int(1500 + ((self.Kp[1] * self.error[1]) + (self.integral[1]) + (self.Kd[1] * self.derivative[1])))
-		self.cmd.rcThrottle = int(1500 + ((self.Kp[2] * self.error[2]) + (self.integral[2]) + (self.Kd[2] * self.derivative[2])))
-
+		self.cmd.rcThrottle = int(1550 + ((self.Kp[2] * self.error[2]) + (self.integral[2]) + (self.Kd[2] * self.derivative[2])))
+		
+		#print("Derivative: ",self.Kd[2] * self.derivative[2],"Integral: ",self.integral[2],"Error: ",self.Kp[2] * self.error[2])
 
  		# limiting the values
 
@@ -264,12 +268,10 @@ class swift():
 
 		# publishing the reference lines
 		self.zero_line_pub.publish(self.zero_line)
-		self.minus_one_pub.publish(self.minus_one_line)
-		self.plus_one_pub.publish(self.plus_one_line)
+		#self.minus_one_pub.publish(self.minus_one_line)
+		#self.plus_one_pub.publish(self.plus_one_line)
 		self.plus_half_pub.publish(self.plus_half_line)
 		self.minus_half_pub.publish(self.minus_half_line)
-
-
 
 
 
