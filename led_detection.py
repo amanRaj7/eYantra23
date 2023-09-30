@@ -1,3 +1,11 @@
+'''
+# * Team Id : #3114
+# * Author List : Aman Raj, Pratyush Roshan Mallik, Gaurav Kumar Sharma, Chandan Priyadarshi
+# * Filename: = led_detection.py
+# * Theme: Luminosity Drone
+# * Functions: 
+# * Global Variables: NONE
+'''
 # import the necessary packages
 from imutils import contours
 from skimage import measure
