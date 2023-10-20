@@ -169,7 +169,11 @@ def pid_control(setpoint):
         drone_position[0] = msg.poses[0].position.x
         drone_position[1] = msg.poses[0].position.y
         drone_position[2] = msg.poses[0].position.z
-
+    def cal_center(cent):
+        x, y = zip(*cent)
+        x = round(sum(x)/3, 2)
+        y = round(sum(y)/3, 2)
+        return [x, y]
     def calculate_pid():
         nonlocal prev_error
                 
@@ -206,15 +210,15 @@ def pid_control(setpoint):
         if all(abs(e) < 0.1 for e in error) and (loop_flag) and setpoint==[0, 0, 8]:
             #print(centroids[0])
             count += 1
-            loop_setpoint = next_setpoint(centroids[0])
+            loop_setpoint = next_setpoint(cal_center(centroids))
             loop_flag = False
-        if all(abs(e) < 0.2 for e in error) and setpoint!=[0, 0, 8] and setpoint!=[11, 11, 29]:
+        if all(abs(e) < 0.1 for e in error) and setpoint!=[9, 9, 30] and setpoint!=[11, 11, 35]:
             animal = 'alien_b'
-            pubbio(setpoint[0], setpoint[1], setpoint[2], animal)
+            pubbio(drone_position[0], drone_position[1], drone_position[2], animal)
             station = True
-        if all(abs(e) < 0.7 for e in error) and setpoint==[1.1, 1.1,  20]:
+        if all(abs(e) < 1 for e in error) and setpoint==[8, 8,  30]:
             land_flag = True
-        if all(abs(e) < 0.9 for e in error) and land_flag and setpoint==[1.1, 1.1, 37]:
+        if all(abs(e) < 0.7 for e in error) and land_flag and setpoint==[11, 11, 35]:
             softland = False
             disarm()
 
@@ -230,9 +234,9 @@ def pid_control(setpoint):
                 setpoint = loop_setpoint
                 flag_set = False
         if station:
-            setpoint = [1.1, 1.1, 20]
+            setpoint = [8, 8, 30]
         if land_flag:
-            setpoint = [1.1, 1.1, 37]
+            setpoint = [11, 11, 35]
 
         calculate_pid()
         r.sleep()
