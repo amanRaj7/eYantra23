@@ -1,101 +1,268 @@
 #!/usr/bin/env python3
-'''
-# * Team Id : #3114
-# * Author List : Aman Raj, Pratyush Roshan Mallik, Gaurav Kumar Sharma, Chandan Priyadarshi
-# * Filename: = led_detection.py
-# * Theme: Luminosity Drone
-# * Functions: NONE
-# * Global Variables: NONE
-'''
 
-# import the necessary packages
 from imutils import contours
 from skimage import measure
 import numpy as np
 import imutils
-import cv2
+import cv2 as cv
 import rospy 
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 
-rospy.init_node('opencv_example', anonymous=True)
+from swift_msgs.msg import swift_msgs
+from geometry_msgs.msg import PoseArray
+from std_msgs.msg import Int16
+from std_msgs.msg import Int64
+from std_msgs.msg import Float64
+from luminosity_drone.msg import Biolocation
 
-# load the image, 
+
+rospy.init_node('drone_control')
+
 bridge = CvBridge()
 cv_image = None
-
+global centroids
+centroids = []
+#centroid= []
+new_setpoint = None
 
 def run_code(cv_image):
-    # print('in loop')
     image = cv_image
-    gray = image
-    # print(image._type)
-    # Convert it to grayscale, and blur it
-    # gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    #print(image.shape)
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    blurred = cv.GaussianBlur(gray, (5, 5), 0)
+    thresh = cv.threshold(blurred, 130, 255, cv.THRESH_BINARY)[1]
 
-    # Threshold the image to reveal light regions in the blurred image
-    _, thresh = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY)
+    thresh = cv.erode(thresh, None, iterations=1)
+    thresh = cv.dilate(thresh, None, iterations=2)
+    labels = measure.label(thresh, background=0)
+    mask = np.zeros(thresh.shape, dtype="uint8")
 
-    # Perform a series of erosions and dilations to remove any small blobs of noise from the thresholded image
-    kernel = np.ones((1, 1), np.uint8)
-    dilation = cv2.dilate(cv2.erode(thresh, kernel, iterations=2), kernel, iterations=2)
-    cv2.imshow('output', dilation)
-    # Perform connected component analysis on the thresholded image
-    labels = measure.label(dilation, background=0)
-    mask = np.zeros(dilation.shape, dtype="uint8")
-
-    # Loop over the unique components
-    for i in np.unique(labels):
-        if i == 0:
+    for label in np.unique(labels):
+        if label == 0:
             continue
 
-        labelMask = np.zeros(dilation.shape, dtype="uint8")
-        labelMask[labels != i] = 255
-        numPixels = cv2.countNonZero(labelMask)
+        labelMask = np.zeros(thresh.shape, dtype="uint8")
+        labelMask[labels == label] = 255
+        numPixels = cv.countNonZero(labelMask)
+        #print(numPixels)
 
-        if numPixels > 300:
-            mask = cv2.add(mask, labelMask)
+        if numPixels > 30 and numPixels < 300: 
+            mask = cv.add(mask, labelMask)
 
-    # Find contours in the mask and sort them from left to right
-    contours, _ = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    contours = sorted(contours, key=lambda c: cv2.boundingRect(c)[0])
+    contours, _ = cv.findContours(mask.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
-    # Initialize lists to store centroid coordinates and area
-    centroids = []
-    areas = []
+    contours = sorted(contours, key=lambda c: cv.minEnclosingCircle(c)[0])
 
-    # Loop over the contours
+    centroid = []
+    area = []
+
     for i, contour in enumerate(contours):
-        # Calculate the area of the contour
-        area = cv2.contourArea(contour)
+        areas = cv.contourArea(contour)
+        M = cv.moments(contour)
+        c_X = round(M["m10"] / M["m00"],2)
+        c_Y = round(M["m01"] / M["m00"],2)
+        cX = int(c_X)
+        cY = int(c_Y)
 
-        # Find the centroid of the contour
-        M = cv2.moments(contour)
-        cX = int(M["m10"] / M["m00"])
-        cY = int(M["m01"] / M["m00"])
+        cv.drawContours(image, [contour], -1, (0, 0, 255), 2)
+        image = cv.putText(image, f'{i + 1}', (cX -30, cY - 25), cv.FONT_HERSHEY_SIMPLEX,0.4, (255, 255, 255), 1)
 
-        # Draw the bright spot on the image
-        cv2.drawContours(image, [contour], -1, (0, 0, 255), 2)
-        cv2.putText(image, f'#{i + 1}', (cX - 15, cY - 23), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        centroid.append((c_X, c_Y))
+        area.append(areas)
 
-        # Append centroid coordinates and area to the respective lists
-        centroids.append((cX, cY))
-        areas.append(area)
-    print(centroids, areas)
+        a = len(centroid)
+        
+    global centroids
+    centroids = centroid
+    # if len(centroid) > 0:
+    #     print(centroid)
 
-    cv2.imshow('output1', image)
-    cv2.waitKey(3)
+    cv.namedWindow('output', cv.WINDOW_NORMAL)
+    cv.imshow('output', image)
+    
+    cv.waitKey(3)
 
 def image_callback(img_msg):
-    # print('hi')
     global cv_image
     try:
-        cv_image = bridge.imgmsg_to_cv2(img_msg, "mono8")
-        # print('decoded')
+        cv_image = bridge.imgmsg_to_cv2(img_msg, "bgr8")
         run_code(cv_image)
     except CvBridgeError as e:
         rospy.logerr("CvBridge Error: {0}".format(e))
 
-# Subscribe to the image topic and wait for data
 sub_image = rospy.Subscriber("/swift/camera_rgb/image_raw", Image, image_callback)
-rospy.spin()
+#sub_image = rospy.Subscriber("/whycon/image_out", Image, image_callback)   
+
+def next_setpoint(coordinate):
+    x,y = coordinate
+    x_n = round((x-640)/80, 2)
+    y_n = round((y - 640)/80 ,2)
+    z_n = 20
+    new_setpoint = [x_n,y_n,z_n]
+    print(new_setpoint)
+    return new_setpoint
+    #pid_control(new_setpoint)
+    
+
+def pid_control(setpoint):
+    rospy.init_node('drone_control')
+
+    drone_position = [0.0, 0.0, 0.0]
+
+    cmd = swift_msgs()
+    cmd.rcRoll = 1500
+    cmd.rcPitch = 1500
+    cmd.rcYaw = 1500
+    cmd.rcThrottle = 1500
+    cmd.rcAUX1 = 1500
+    cmd.rcAUX2 = 1500
+    cmd.rcAUX3 = 1500
+    cmd.rcAUX4 = 1500
+    if setpoint == [0, 0, 8]:
+        Kp = [30.78, 34.5, 104.8]
+        Ki = [0.0008, 0, 0.0427]
+        Kd = [600.5, 579, 1583]
+    else:
+        Kp = [30.78, 34.5, 63.2]
+        Ki = [0.0008, 0, 0.0826]
+        Kd = [600.5, 579, 655]
+
+    prev_error = [0.0, 0.0, 0.0]
+    sum_error = [0.0, 0.0, 0.0]
+
+    min_values = [1350, 1350, 1000]
+    max_values = [1700, 1700, 2000]
+
+    derivative = [0.0, 0.0, 0.0]
+    integral = [0.0, 0.0, 0.0]
+
+    command_pub = rospy.Publisher('/drone_command', swift_msgs, queue_size=1)
+    def pubbio(x, y, z, org):
+        bio.organism_type = org
+        bio.whycon_x = x
+        bio.whycon_y = y
+        bio.whycon_z = z
+        biopub.publish(bio)
+    def disarm():
+        cmd.rcRoll = 1500
+        cmd.rcYaw = 1500
+        cmd.rcPitch = 1500
+        cmd.rcThrottle = 1000
+        cmd.rcAUX4 = 1100
+        command_pub.publish(cmd)
+        rospy.sleep(1)
+
+    def arm():
+        disarm()
+        cmd.rcRoll = 1500
+        cmd.rcYaw = 1500
+        cmd.rcPitch = 1500
+        cmd.rcThrottle = 1000
+        cmd.rcAUX4 = 1500
+        command_pub.publish(cmd)
+        rospy.sleep(1)
+
+    def whycon_callback(msg):
+        global drone_position_set
+        drone_position_set = drone_position
+        drone_position[0] = msg.poses[0].position.x
+        drone_position[1] = msg.poses[0].position.y
+        drone_position[2] = msg.poses[0].position.z
+
+    def calculate_pid():
+        nonlocal prev_error
+                
+        error =     [drone_position[i] - setpoint[i] for i in range(3)]
+
+        integral = [sum_error[i] * Ki[i] for i in range(3)]
+
+        derivative = [error[i] - prev_error[i] for i in range(3)]
+
+
+        sum_error[0] += error[0]
+        sum_error[1] += error[1]
+        sum_error[2] += error[2]
+
+        cmd.rcRoll = int(1500 - ((Kp[0] * error[0]) + (integral[0]) + (Kd[0] * derivative[0])))
+        cmd.rcPitch = int(1500 + ((Kp[1] * error[1]) + (integral[1]) + (Kd[1] * derivative[1])))
+        cmd.rcThrottle = int(1550 + ((Kp[2] * error[2]) + (integral[2]) + (Kd[2] * derivative[2])))
+
+        cmd.rcRoll = max(min(cmd.rcRoll, max_values[0]), min_values[0])
+        cmd.rcPitch = max(min(cmd.rcPitch, max_values[1]), min_values[1])
+        cmd.rcThrottle = max(min(cmd.rcThrottle, max_values[2]), min_values[2])
+
+        prev_error = error
+
+        command_pub.publish(cmd)
+
+        global loop_flag
+        global loop_setpoint
+        global count
+        global station
+        global land_flag
+        global land
+        global softland
+        if all(abs(e) < 0.1 for e in error) and (loop_flag) and setpoint==[0, 0, 8]:
+            #print(centroids[0])
+            count += 1
+            loop_setpoint = next_setpoint(centroids[0])
+            loop_flag = False
+        if all(abs(e) < 0.2 for e in error) and setpoint!=[0, 0, 8] and setpoint!=[11, 11, 29]:
+            animal = 'alien_b'
+            pubbio(setpoint[0], setpoint[1], setpoint[2], animal)
+            station = True
+        if all(abs(e) < 0.7 for e in error) and setpoint==[1.1, 1.1,  20]:
+            land_flag = True
+        if all(abs(e) < 0.9 for e in error) and land_flag and setpoint==[1.1, 1.1, 37]:
+            softland = False
+            disarm()
+
+    arm()
+    rospy.Subscriber('whycon/poses', PoseArray, whycon_callback)
+    biopub = rospy.Publisher('astrobiolocation', Biolocation, queue_size=1)
+    bio = Biolocation()
+    r = rospy.Rate(30)
+    while not rospy.is_shutdown() and softland:
+        
+        global flag_set
+        if loop_setpoint!=None and flag_set:
+                setpoint = loop_setpoint
+                flag_set = False
+        if station:
+            setpoint = [1.1, 1.1, 20]
+        if land_flag:
+            setpoint = [1.1, 1.1, 37]
+
+        calculate_pid()
+        r.sleep()
+global flag_set
+global loop_flag 
+global loop_setpoint
+global count
+global station
+global land_flag
+global land
+global softland
+softland = True
+land = False
+land_flag = False
+station = False
+count = 0
+loop_setpoint = None
+loop_flag = True
+flag_set  = True
+if __name__ == '__main__':
+    # Example usage of the pid_control function with a custom setpoint:
+    # custom_setpoint = [-3.77, 4.43, 25]
+
+    custom_setpoint = [0, 0, 8]
+
+    pid_control(custom_setpoint)
+    pid_control(next_setpoint(centroids[0]))
+    # if flag:
+    #     pid_control(next_setpoint(centroids[0]))
+
+# Keep the ROS node running
+#rospy.spin()
+        
