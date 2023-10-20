@@ -202,6 +202,7 @@ def pid_control(setpoint):
         global station
         global land_flag
         global land
+        global softland
         if all(abs(e) < 0.1 for e in error) and (loop_flag) and setpoint==[0, 0, 8]:
             #print(centroids[0])
             count += 1
@@ -211,9 +212,10 @@ def pid_control(setpoint):
             animal = 'alien_b'
             pubbio(setpoint[0], setpoint[1], setpoint[2], animal)
             station = True
-        if all(abs(e) < 0.2 for e in error) and setpoint==[11, 11, 20]:
+        if all(abs(e) < 0.7 for e in error) and setpoint==[1.1, 1.1,  20]:
             land_flag = True
-        if all(abs(e) < 0.3 for e in error) and land_flag and setpoint==[11, 11, 37]:
+        if all(abs(e) < 0.9 for e in error) and land_flag and setpoint==[1.1, 1.1, 37]:
+            softland = False
             disarm()
 
     arm()
@@ -221,16 +223,16 @@ def pid_control(setpoint):
     biopub = rospy.Publisher('astrobiolocation', Biolocation, queue_size=1)
     bio = Biolocation()
     r = rospy.Rate(30)
-    while not rospy.is_shutdown():
+    while not rospy.is_shutdown() and softland:
         
         global flag_set
         if loop_setpoint!=None and flag_set:
                 setpoint = loop_setpoint
                 flag_set = False
         if station:
-            setpoint = [11, 11, 20]
+            setpoint = [1.1, 1.1, 20]
         if land_flag:
-            setpoint = [11, 11, 37]
+            setpoint = [1.1, 1.1, 37]
 
         calculate_pid()
         r.sleep()
@@ -241,6 +243,8 @@ global count
 global station
 global land_flag
 global land
+global softland
+softland = True
 land = False
 land_flag = False
 station = False
