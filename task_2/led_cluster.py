@@ -14,6 +14,7 @@ from geometry_msgs.msg import PoseArray
 from std_msgs.msg import Int16
 from std_msgs.msg import Int64
 from std_msgs.msg import Float64
+from luminosity_drone.msg import Biolocation
 
 
 rospy.init_node('drone_control')
@@ -137,7 +138,12 @@ def pid_control(setpoint):
     integral = [0.0, 0.0, 0.0]
 
     command_pub = rospy.Publisher('/drone_command', swift_msgs, queue_size=1)
-
+    def pubbio(x, y, z, org):
+        bio.organism_type = org
+        bio.whycon_x = x
+        bio.whycon_y = y
+        bio.whycon_z = z
+        biopub.publish(bio)
     def disarm():
         cmd.rcRoll = 1500
         cmd.rcYaw = 1500
@@ -194,21 +200,26 @@ def pid_control(setpoint):
         global loop_setpoint
         global count
         global station
+        global land_flag
+        global land
         if all(abs(e) < 0.1 for e in error) and (loop_flag) and setpoint==[0, 0, 8]:
             #print(centroids[0])
             count += 1
             loop_setpoint = next_setpoint(centroids[0])
             loop_flag = False
-        if all(abs(e) < 0.2 for e in error) and setpoint!=[0, 0, 8] and setpoint!=[11, 11, 37]:
-            #add transmission code here
+        if all(abs(e) < 0.2 for e in error) and setpoint!=[0, 0, 8] and setpoint!=[11, 11, 29]:
+            animal = 'alien_b'
+            pubbio(setpoint[0], setpoint[1], setpoint[2], animal)
             station = True
-        if all(abs(e) < 0.2 for e in error) and setpoint==[11, 11, 37]:
+        if all(abs(e) < 0.2 for e in error) and setpoint==[11, 11, 20]:
+            land_flag = True
+        if all(abs(e) < 0.3 for e in error) and land_flag and setpoint==[11, 11, 37]:
             disarm()
-            
 
     arm()
     rospy.Subscriber('whycon/poses', PoseArray, whycon_callback)
-    
+    biopub = rospy.Publisher('astrobiolocation', Biolocation, queue_size=1)
+    bio = Biolocation()
     r = rospy.Rate(30)
     while not rospy.is_shutdown():
         
@@ -217,7 +228,9 @@ def pid_control(setpoint):
                 setpoint = loop_setpoint
                 flag_set = False
         if station:
-            setpoint = [11, 11, 30]
+            setpoint = [11, 11, 20]
+        if land_flag:
+            setpoint = [11, 11, 37]
 
         calculate_pid()
         r.sleep()
@@ -226,6 +239,10 @@ global loop_flag
 global loop_setpoint
 global count
 global station
+global land_flag
+global land
+land = False
+land_flag = False
 station = False
 count = 0
 loop_setpoint = None
@@ -234,6 +251,7 @@ flag_set  = True
 if __name__ == '__main__':
     # Example usage of the pid_control function with a custom setpoint:
     # custom_setpoint = [-3.77, 4.43, 25]
+
     custom_setpoint = [0, 0, 8]
 
     pid_control(custom_setpoint)
