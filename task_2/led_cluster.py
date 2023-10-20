@@ -200,6 +200,7 @@ def pid_control(setpoint):
             loop_setpoint = next_setpoint(centroids[0])
             loop_flag = False
         if all(abs(e) < 0.2 for e in error) and setpoint!=[0, 0, 8] and setpoint!=[11, 11, 37]:
+            #add transmission code here
             station = True
         if all(abs(e) < 0.2 for e in error) and setpoint==[11, 11, 37]:
             disarm()
