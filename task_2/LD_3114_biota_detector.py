@@ -57,8 +57,7 @@ class swift():
 		self.stop_image = True # boolean whether to stop the image detection or not
 		self.cmd = swift_msgs()
 
-		self.visited_set = []
-		self.pub_count = 0
+		self.visited_set = []   # set to store the visited coordinates
 		
 
 		self.curr_setpoint = [0.0, 0.0, 0.0] # current setpoint of the drone
@@ -96,8 +95,7 @@ class swift():
 		self.integral = [0.0, 0.0, 0.0]
 
 		# Publishing /drone_command 
-		# / Subscribe to /whycon/poses, /ardrone/bottom/image_raw, /pid_tuning_altitude, 
-		# /pid_tuning_roll, /pid_tuning_pitch, /pid_tuning_yaw
+		# / Subscribe to /whycon/poses, imu , etc
 
 		self.command_pub = rospy.Publisher('/drone_command', swift_msgs, queue_size=1)
 		rospy.Subscriber('whycon/poses', PoseArray, self.whycon_callback)
@@ -261,23 +259,19 @@ class swift():
 		elif self.cmd.rcThrottle < self.min_values[2]:
 			self.cmd.rcThrottle = self.min_values[2]
 
-		self.prev_error = self.error
+		self.prev_error = self.error  
 
-		self.command_pub.publish(self.cmd)
+		self.command_pub.publish(self.cmd)  # Publishing /drone_command
 
 		if all(abs(e) < 0.5 for e in self.error):
 			self.reached_start = True
 	
 	# function to calculate the approximate position of the alien
 	def image_pid(self):
-		os.system("clear")
-		cent_last_index = len(self.cent) - 3
-
+		prev_x = (self.cent[-3] - 250)
+		prev_y = (self.cent[-2] - 250)
 		if self.recalculate_approx:
 			rotation_angle = self.drone_euler[2] - 90
-			prev_x = (self.cent[cent_last_index] - 250)
-			prev_y = (self.cent[cent_last_index + 1] - 250)
-
 			rotated_x = (prev_x * math.cos(math.radians(rotation_angle))) - (prev_y * math.sin(math.radians(rotation_angle)))
 			rotated_y = (prev_x * math.sin(math.radians(rotation_angle))) + (prev_y * math.cos(math.radians(rotation_angle)))
 
@@ -292,6 +286,7 @@ class swift():
 		alt_error = self.drone_position[2] - 28
 		self.error = [roll_error, pitch_error, alt_error]
 
+		# publish when drone is within error range of calculated position
 		if all(abs(e) < 0.2 for e in self.error):
 			alreadyFound = False
 			for coord in self.visited_set:
@@ -299,7 +294,7 @@ class swift():
 					alreadyFound = True
 			if not alreadyFound:
 				self.visited_set.append([self.alien_approx_x, self.alien_approx_y])
-				print(self.drone_position[0], self.drone_position[1], 25)
+				print(self.alien_approx_x, self.alien_approx_y, 28)
 				print('done')
 				if self.alien == 2:
 					alien_type = 'alien_a'
@@ -308,21 +303,39 @@ class swift():
 				elif self.alien == 4:
 					alien_type = 'alien_c'
 				self.pub_bio(self.alien_approx_x, self.alien_approx_y, self.drone_position[2], alien_type)
-				self.pub_count += 1
+			# Additional logic for continuing the search
+			swift_drone.next()
+			self.image_on_screen = False  # Reset the flag to continue searching
+			self.stop_image = False
+
+		# publish when alien is almost in center of frame
+		elif abs(prev_x) < 4 and abs(prev_y) < 4:
+			alreadyFound = False
+			for coord in self.visited_set:
+				if math.dist(coord, [self.alien_approx_x, self.alien_approx_y]) < 3.0:
+					alreadyFound = True
+			if not alreadyFound:
+				self.visited_set.append([self.alien_approx_x, self.alien_approx_y])
+				print(self.alien_approx_x, self.alien_approx_y, 28)
+				print('done')
+				if self.alien == 2:
+					alien_type = 'alien_a'
+				elif self.alien == 3:
+					alien_type = 'alien_b'
+				elif self.alien == 4:
+					alien_type = 'alien_c'
+				self.pub_bio(self.alien_approx_x, self.alien_approx_y, self.drone_position[2], alien_type)
 			# Additional logic for continuing the search
 			swift_drone.next()
 			self.image_on_screen = False  # Reset the flag to continue searching
 			self.stop_image = False
 			
-			
 		# reached end now land drone
-		if(self.pub_count == 3):
+		if(self.setpoint[1] > 9):
 			self.land_flag = True
 
 	# function to navigate the drone in a rectangular path
 	def nav_pid(self):
-		# os.system("clear")
-
 		swift_drone.next()
 		self.curr_setpoint = self.setpoint
 
@@ -330,35 +343,40 @@ class swift():
 		pitch_error = self.drone_position[1] - self.setpoint[1]
 		alt_error = self.drone_position[2] - self.setpoint[2]
 		self.error = [roll_error, pitch_error, alt_error]
-	
-	def next(self):
-		print("NAV PID")
+
+
+	# function to move to the next setpoint
+	def next(self): 
 		left_right_flag = (int(self.drone_left_to_right) * 2) - 1
-		print("left_right_flag", left_right_flag)
+	
+		if(self.setpoint[1] > 9):  # reached end now land drone
+			self.land_flag = True
 
 		# move to next setpoint if under error range
 		if self.reached_start:
 			error = 0.1 if self.drone_up_to_down else 0.5
-			print("error", error)
-			if(abs(self.setpoint[0] - self.drone_position[0]) < error):	
-				self.setpoint[0] = self.setpoint[0] + ((left_right_flag) * 6)
-				self.drone_up_to_down = False
-				self.stop_image = True
+
+			if(abs(self.setpoint[0] - self.drone_position[0]) < error):	 # go to next setpoint
+					self.setpoint[0] = self.setpoint[0] + ((left_right_flag) * 6)
+					self.drone_up_to_down = False
+					self.stop_image = True
+
 			if(self.setpoint[0] > 10 or self.setpoint[0] < -10): # out of bounds
 				self.drone_up_to_down = True
 				self.drone_left_to_right = False if self.drone_left_to_right else True
 				self.setpoint[0] = left_right_flag * 9
-				self.setpoint[1] += 4
-	# function to land the drone
+				self.setpoint[1] += 3
 
+
+	# function to land the drone
 	def land_pid(self):
-		roll_error = self.drone_position[0] - 10.8
+		roll_error = self.drone_position[0] - 10.9
 		pitch_error = self.drone_position[1] - 10.8
 		alt_error = self.drone_position[2] - 28
 		self.error = [roll_error, pitch_error, alt_error]
 		
 		# deactivate the drone if it is within the error range
-		if all(abs(e) < 0.1 for e in self.error):
+		if abs(roll_error)<0.1 and abs(pitch_error)<0.1 and abs(alt_error)<0.2:
 			self.disarm()
 			print('deactivate')
 			self.deactivate = True
@@ -377,13 +395,15 @@ if __name__ == '__main__':
 	swift_drone = swift()
 	r = rospy.Rate(30) #specify rate in Hz based upon your desired PID sampling time, i.e. if desired sample time is 33ms specify rate as 30Hz
 	while not rospy.is_shutdown() and not (swift_drone.deactivate):
-
+		# navigate normally when alien is not on screen
 		if(not swift_drone.image_on_screen) and (not swift_drone.land_flag):
 			swift_drone.nav_pid()
 			swift_drone.pid()
+		# navigate and detect alien when alien is on screen
 		elif(swift_drone.image_on_screen) and (not swift_drone.land_flag):
 			swift_drone.image_pid()
 			swift_drone.pid()
+		# land the drone when the drone reaches the end
 		else:
 			swift_drone.land_pid()
 			if (swift_drone.deactivate):
