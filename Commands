@@ -3,16 +3,36 @@ rostopic list
 rost tab tab
 rostopic tab tab
 rostopic info /drone_command
+rostopic hz /whycon/poses
+
+rosmsg show  sensor_msgs/Imu
 
 fly
 
-rostopic pub /drone_command swift_msgs/swift_msgs "{rcRoll: 1500, rcPitch: 1500, rcYaw: 1500, rcThrottle: 1590, rcAUX1: 0, rcAUX2: 0, rcAUX3: 0, rcAUX4: 1500}"
+rostopic pub /drone_command swift_msgs/swift_msgs "{rcRoll: 1500, rcPitch: 1500, rcYaw: 1800, rcThrottle: 1500, rcAUX1: 1500, rcAUX2: 1500, rcAUX3: 1500, rcAUX4: 1500}"
 
 stop
 
 Kp  Ki Kd
 197 4 634
 
+
+rostopic pub /drone_command swift_msgs/swift_msgs "{rcRoll: 1500, rcPitch: 1500, rcYaw: 1500, rcThrottle: 1810, rcAUX1: 0, rcAUX2: 0, rcAUX3: 0, rcAUX4: 1500}"
+
+ros1
+ros1_ws
+roslaunch luminosity_drone task_4a.launch
+
+ros1
+rosbridge
+ros2 run ros1_bridge parameter_bridge
+
+ros2 run pid_tune pid_tune_drone.py
+
+ros2 run plotjuggler plotjuggler
+
+cd to lumi---
+pthon3 controller.py
 
 -------------------++++++++++++++++++++----------------------------MAIN COMMANDS
 roslaunch plotjuggler_ros plotjuggler.launch 
@@ -23,3 +43,5 @@ roslaunch luminosity_drone task_1.launch
 RUN ALL THESE COMMANDS IN SEPARATE BUT WINDOWS.. MAKE SURE YOU FIRST CD CATKIN_WS IF NOT DONE
  
 PUT position_hold.py in /catkin_ws/src/luminosity_drone/luminosity_drone/scripts/position_hold.py
+
+/clo
