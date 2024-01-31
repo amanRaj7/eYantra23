@@ -21,24 +21,28 @@ from swift_msgs.srv import CommandBool
 
 
 
-MIN_ROLL = 1250
-BASE_ROLL = 1500
+MIN_ROLL = 1400
+BASE_ROLL = 1490
 MAX_ROLL = 1600
-SUM_ERROR_ROLL_LIMIT = 10000
+SUM_ERROR_ROLL_LIMIT = 30
 
 
 DRONE_WHYCON_POSE = [[], [], []]
 
 # Similarly, create upper and lower limits, base value, and max sum error values for roll and pitch
-MIN_PITCH = 1250
+MIN_PITCH = 1400
 BASE_PITCH = 1480
 MAX_PITCH = 1600
-SUM_ERROR_PITCH_LIMIT = 10000
+SUM_ERROR_PITCH_LIMIT = 30
 
-MIN_THROTTLE = 1000
-BASE_THROTTLE = 1450
-MAX_THROTTLE = 2000
-SUM_ERROR_THROTTLE_LIMIT = 1000
+MIN_THROTTLE = 1420
+BASE_THROTTLE = 1460
+MAX_THROTTLE = 1520
+SUM_ERROR_THROTTLE_LIMIT = 10000
+
+# LANDING MACROS
+LANDING_TRIGGER_ITERATION = 500
+LANDING_DECREMENTER = 1
 
 class DroneController():
     def __init__(self,node):
@@ -49,30 +53,26 @@ class DroneController():
         self.last_whycon_pose_received_at = 0
         self.commandbool = CommandBool.Request()
         service_endpoint = "/swift/cmd/arming"
-
         self.arming_service_client = self.node.create_client(CommandBool,service_endpoint)
-        self.set_points = [0, 0, 22]         # Setpoints for x, y, z respectively      
         
-        self.error = [0, 0, 0]         # Error for roll, pitch and throttle        
-        self.old=0
-        # Create variables for integral and differential error
+        """OUR DEFINATION"""
+        self.it = 0
+        self.set_points = [0, 0, 22]         # Setpoints for x, y, z respectively      
+        self.error = [0, 0, 0]         # Error for roll, pitch and throttle
         self.drone_position = [0,0,0]
         self.integral_error = [0, 0, 0]
-
         self.derivative_error = [0, 0, 0]
-
-        # Create variables for previous error and sum_error
-        
         self.previous_error = [0, 0, 0]
-
         self.sum_error = [0, 0, 0]
+        self.Kp = [ 1040 * 0.01  , 930 * 0.01  ,  615 * 0.01  ]
+        self.Ki = [ 60 * 0.0001  , 50 * 0.0001  , 215* 0.0001  ]
+        self.Kd = [ 3500 * 0.1   , 4500 * 0.1   , 1840 * 0.1    ]
 
-        self.Kp = [ 411 * 0.01  , 211 * 0.01  ,  0 * 0.01  ]
-
-        # Similarly create variables for Kd and Ki
-        self.Ki = [ 0 * 0.0001, 0 * 0.0001, 0* 0.0001]
-
-        self.Kd = [ 822 * 0.1   , 822 * 0.1   , 0 * 0.1   ]
+        # LANDING VARIABLES
+        self.land_iteration_count = 0
+        self.landing_decrement_sum = 0
+        self.landing_saved_throttle = 0
+        self.is_landing = False
 
         # Create subscriber for WhyCon 
         
@@ -124,47 +124,67 @@ class DroneController():
         self.Ki[1] = pitch.ki * 0.0001
         self.Kd[1] = pitch.kd * 0.1
 
-    def pid(self):          # PID algorithm
-
-        # 0 : calculating Error, Derivative, Integral for Roll error : x axis
+    def butter_position(self, roll, pitch, throttle):
+        # apply the low pass filter 
+        alpha = 1
+        beta = 0.9
+        self.drone_position[0] = alpha*roll+ (1-alpha)*self.drone_position[0]
+        self.drone_position[1] = alpha*pitch+ (1-alpha)*self.drone_position[1]
+        self.drone_position[2] = beta*throttle+ (1-beta)*self.drone_position[2]
+        return self.drone_position
+        
+    def pid(self):
+        print(f"\nITERATION {self.it}")
+        print(f"Time: {self.node.get_clock().now().seconds_nanoseconds()}")
+        self.it = self.it+1
+        # ERROR 
         try:
-            self.error[0] = self.drone_whycon_pose_array.poses[0].position.x - self.set_points[0] 
-        # Similarly calculate error for y and z axes 
-            self.error[1] = self.drone_whycon_pose_array.poses[0].position.y - self.set_points[1]
-            self.error[2] = self.drone_whycon_pose_array.poses[0].position.z - self.set_points[2]
+            position = self.butter_position(roll = self.drone_whycon_pose_array._poses[0].position.x, pitch = self.drone_whycon_pose_array.poses[0].position.y , throttle= self.drone_whycon_pose_array.poses[0].position.z)
+            print(f"position: {position}")
+            self.error[0] = position[0] - self.set_points[0]
+            self.error[1] = position[1] - self.set_points[1]
+            self.error[2] = position[2] - self.set_points[2]
         except:
             pass
+        print(f"ERROR: {self. error}")
 
-        # Calculate derivative and intergral errors. Apply anti windup on integral error (You can use your own method for anti windup, an example is shown here)
+        # DERIVATIVE ERROR
         self.derivative_error[0] = (self.error[0] - self.previous_error[0])
         self.derivative_error[1] = (self.error[1] - self.previous_error[1])
         self.derivative_error[2] = (self.error[2] - self.previous_error[2])
+        print(f"Derivative Error: {self.derivative_error}")
+
+        self.sum_error[0] = self.sum_error[0]+self.error[0]
+        self.sum_error[1] = self.sum_error[1]+self.error[1]
+        self.sum_error[2] = self.sum_error[2]+self.error[2]
+        
+
+    
+        
+
+        #  WINDUP TRY NEW AS WELL---------------------+++++++++++++ 
+        # if self.sum_error[0] > SUM_ERROR_ROLL_LIMIT:
+        #     self.sum_error[0] = SUM_ERROR_ROLL_LIMIT
+        # if self.sum_error[0] < -SUM_ERROR_ROLL_LIMIT:
+        #     self.sum_error[0] = -SUM_ERROR_ROLL_LIMIT
+
+        # if self.sum_error[1] > SUM_ERROR_PITCH_LIMIT:
+        #     self.sum_error[1] = SUM_ERROR_PITCH_LIMIT
+        # if self.sum_error[1] < -SUM_ERROR_PITCH_LIMIT:
+        #     self.sum_error[1] = -SUM_ERROR_PITCH_LIMIT
 
         self.integral_error[0] = self.sum_error[0] * self.Ki[0]
         self.integral_error[1] = self.sum_error[1] * self.Ki[1]
         self.integral_error[2] = self.sum_error[2] * self.Ki[2]
 
-
-        #  WINDUP TRY NEW AS WELL---------------------+++++++++++++ 
-        # if self.integral_error[0] > SUM_ERROR_ROLL_LIMIT:
-        #     self.integral_error[0] = SUM_ERROR_ROLL_LIMIT
-        # if self.integral_error[0] < -SUM_ERROR_ROLL_LIMIT:
-        #     self.integral_error[0] = -SUM_ERROR_ROLL_LIMIT
-
-        # if self.integral_error[1] > SUM_ERROR_PITCH_LIMIT:
-        #     self.integral_error[1] = SUM_ERROR_PITCH_LIMIT
-        # if self.integral_error[1] < -SUM_ERROR_PITCH_LIMIT:
-        #     self.integral_error[1] = -SUM_ERROR_PITCH_LIMIT
+        print(f"Integral Error: {self.integral_error}")
+        print(f"Sum Error: {self.sum_error}")
         
-        if self.integral_error[2] > SUM_ERROR_THROTTLE_LIMIT:
-            self.integral_error[2] = SUM_ERROR_THROTTLE_LIMIT
-        if self.integral_error[2] < -SUM_ERROR_THROTTLE_LIMIT:
-            self.integral_error[2] = -SUM_ERROR_THROTTLE_LIMIT
 
     
-        self.sum_error[0] += self.error[0]
-        self.sum_error[1] += self.error[1]
-        self.sum_error[2] += self.error[2]
+        # self.sum_error[0] += self.error[0]
+        # self.sum_error[1] += self.error[1]
+        # self.sum_error[2] += self.error[2]
 
         
         # 1 : calculating Error, Derivative, Integral for Pitch error : y axis
@@ -173,13 +193,50 @@ class DroneController():
 
         #self.Kp[2]=2000
         # Write the PID equations and calculate the self.rc_message.rc_throttle, self.rc_message.rc_roll, self.rc_message.rc_pitch
+        print(f"\n\n{self.integral_error[0]}")
         ROLL        = int(BASE_ROLL     + ((self.Kp[0] * self.error[0]) + (self.integral_error[0]) + (self.Kd[0] * self.derivative_error[0])))
         PITCH       = int(BASE_PITCH    - ((self.Kp[1] * self.error[1]) + (self.integral_error[1]) + (self.Kd[1] * self.derivative_error[1])))
-        THROTTLE    = int(BASE_THROTTLE + ((self.Kp[2] * self.error[2]) + (self.integral_error[2]) + (self.Kd[2] * self.derivative_error[2])))
-        print(THROTTLE," ",self.error[2]," ",self.sum_error[2]," ",self.Kp[2])
-
+        THROTTLE    = int(BASE_THROTTLE + ((self.Kp[2] * self.error[2]) + (self.integral_error[2]) + (self.Kd[2] * self.derivative_error[2]))) 
+        print(f"Calculated Speed: Roll: {ROLL}, Pitch: {PITCH}, Throttle: {THROTTLE}")
+        # print(THROTTLE," ",self.error[2]," ",self.sum_error[2]," ",self.Kp[2])
+        # if self.error[2] > 4:
+        #     THROTTLE -= 20
+        # if self.error[2] < 0.5:
+        #     THROTTLE += 10
         # Save current error in previous error
-        self.previous_error = self.error
+        # print("old", self.previous_error)
+        self.previous_error[0] = self.error[0]
+        self.previous_error[1] = self.error[1]
+        self.previous_error[2] = self.error[2]
+        # print("new", self.previous_error)
+
+        #LANDING
+        error_limit = 0.8
+        roll_hower_flag     = self.error[0] <  error_limit and self.error[0] > -error_limit
+        pitch_hower_flag    = self.error[1] <  error_limit and self.error[1] > -error_limit
+        throttle_hower_flag = self.error[2] <  error_limit and self.error[2] > -error_limit
+
+        if not self.is_landing:
+            if (roll_hower_flag and pitch_hower_flag and throttle_hower_flag):
+
+                self.land_iteration_count += 1
+
+                if self.land_iteration_count > LANDING_TRIGGER_ITERATION :
+                    #self.landing_decrement_sum -= LANDING_DECREMENTER
+                    self.is_landing = True
+                print("HOVER")
+            else :
+                self.land_iteration_count = 0
+                
+        
+        if self.is_landing :
+            print("LANDING")
+            self.landing_decrement_sum += LANDING_DECREMENTER
+
+            # saved throttle first time is_landing is triggered
+            if self.landing_saved_throttle == 0:
+                self.landing_saved_throttle = THROTTLE
+
     #------------------------------------------------------------------------------------------------------------------------
 
         self.publish_data_to_rpi( roll = ROLL, pitch = PITCH, throttle = THROTTLE)
@@ -200,9 +257,9 @@ class DroneController():
         )
         self.error_pub.publish(
             PIDError(
-                roll_error=float(ROLL),
-                pitch_error=float(PITCH),
-                throttle_error=float(THROTTLE),
+                roll_error=float(self.error[2]),
+                pitch_error=float(self.derivative_error[2]),
+                throttle_error=float(self.sum_error[2]),
                 yaw_error=-0.0,
                 zero_error=0.0,
             )
@@ -210,61 +267,80 @@ class DroneController():
 
 
     def publish_data_to_rpi(self, roll, pitch, throttle):
-        #roll, pitch, throttle = self.low_pass_filter(roll=roll, pitch=pitch, throttle=throttle)
-        
+
         self.rc_message.rc_throttle = int(throttle)
         self.rc_message.rc_roll = int(roll)
         self.rc_message.rc_pitch = int(pitch)
-        # Send constant 1500 to rc_message.rc_yaw
         self.rc_message.rc_yaw = int(1500)
+
+        """APPLYING BUTTERWORTH FILTER"""
+        # Filter
+        # alpha = 0.7
+        # self.new_speed[0] = alpha*roll+ (1-alpha)*self.new_speed[0]
+        # self.new_speed[1] = alpha*pitch+ (1-alpha)*self.new_speed[1]
+        # self.new_speed[2] = alpha*throttle+ (1-alpha)*self.new_speed[2]
+        # roll = self.new_speed[0]
+        # pitch = self.new_speed[1]
+        # throttle = self.new_speed[2]
+
         # BUTTERWORTH FILTER
-        # span = 15
-        # for index, val in enumerate([roll, pitch, throttle]):
-        #     DRONE_WHYCON_POSE[index].append(val)
-        #     if len(DRONE_WHYCON_POSE[index]) == span:
-        #         DRONE_WHYCON_POSE[index].pop(0)
-        #     if len(DRONE_WHYCON_POSE[index]) != span-1:
-        #         return
-        #     order = 3
-        #     fs = 60
-        #     fc = 5
-        #     nyq = 0.5 * fs
-        #     wc = fc/nyq
-        #     b, a = scipy.signal.butter(N=order, Wn=wc, btype='lowpass', analog=False, output='ba')
-        #     filtered_signal = scipy.signal.lfilter(b, a, DRONE_WHYCON_POSE[index])
-        #     if index == 0:
-        #         self.rc_message.rc_roll = int(filtered_signal[-1])
-        #     elif index == 1:
-        #         self.rc_message.rc_pitch = int(filtered_signal[-1])
-        #     elif index == 2:
-        #         self.rc_message.rc_throttle = int(filtered_signal[-1])
+        span = 15
+        for index, val in enumerate([roll, pitch, throttle]):
+            DRONE_WHYCON_POSE[index].append(val)
+            if len(DRONE_WHYCON_POSE[index]) == span:
+                DRONE_WHYCON_POSE[index].pop(0)
+            if len(DRONE_WHYCON_POSE[index]) != span-1:
+                return
+            order = 3
+            fs = 60
+            fc = 5
+            nyq = 0.5 * fs
+            wc = fc/nyq
+            b, a = scipy.signal.butter(N=order, Wn=wc, btype='lowpass', analog=False, output='ba')
+            filtered_signal = scipy.signal.lfilter(b, a, DRONE_WHYCON_POSE[index])
+            if index == 0:
+                self.rc_message.rc_roll = int(filtered_signal[-1])
+            elif index == 1:
+                self.rc_message.rc_pitch = int(filtered_signal[-1])
+            elif index == 2:
+                self.rc_message.rc_throttle = int(filtered_signal[-1])
         
-        # self.filter_pub.publish(
-        #     PIDError(
-        #         roll_error=float(self.old),
-        #         pitch_error=float(self.rc_message.rc_throttle),
-        #         throttle_error=0.0,
-        #         yaw_error=-0.0,c = fc / nyq
-        #     b, a = scipy.signal.butter(N=
-        #         zero_error=0.0,
-        #     )
-        # )
-        if self.rc_message.rc_roll > MAX_ROLL:     #checking range i.e. bet 1000 and 2000
+        
+        if self.rc_message.rc_roll > MAX_ROLL:     
             self.rc_message.rc_roll = MAX_ROLL
         elif self.rc_message.rc_roll < MIN_ROLL:
             self.rc_message.rc_roll = MIN_ROLL
-
-        # Similarly add bounds for pitch yaw and throttle 
+ 
         if self.rc_message.rc_pitch > MAX_PITCH:
             self.rc_message.rc_pitch = MAX_PITCH
         elif self.rc_message.rc_pitch < MIN_PITCH:
             self.rc_message.rc_pitch = MIN_PITCH
-        
-        if self.rc_message.rc_throttle > MAX_THROTTLE:
-            self.rc_message.rc_throttle = MAX_THROTTLE
+        limit_throttle = MAX_THROTTLE-self.landing_decrement_sum
+        if limit_throttle<1440:
+            limit_throttle = 1440
+
+        if(limit_throttle < 1350) or (self.error[2]>9.7) and self.is_landing:
+            self.disarm()
+        if self.rc_message.rc_throttle > limit_throttle:
+            self.rc_message.rc_throttle = limit_throttle
         elif self.rc_message.rc_throttle < MIN_THROTTLE:
             self.rc_message.rc_throttle = MIN_THROTTLE
+
+        #  # LANDING THORTTLE LIMIT
+        # if self.is_landing :
+        #     self.lan
+
+        self.filter_pub.publish(
+            PIDError(
+                roll_error=float(self.rc_message.rc_roll),
+                pitch_error=float(self.rc_message.rc_pitch),
+                throttle_error=float(self.rc_message.rc_throttle),
+                yaw_error=-0.0,
+                zero_error=0.0,
+            )
+        )
         
+        print(f"Limitted Speed: Roll: {self.rc_message.rc_roll}, Pitch: {self.rc_message.rc_pitch}, Throttle: {self.rc_message.rc_throttle}")
         self.rc_pub.publish(self.rc_message)
 
 
@@ -279,7 +355,7 @@ class DroneController():
 
     def arm(self):
         self.node.get_logger().info("Calling arm service")
-        self.commandbool.value = True
+        self.commandbool.value = True   
         self.future = self.arming_service_client.call_async(self.commandbool)
 
     # Function to disarm the drone 
