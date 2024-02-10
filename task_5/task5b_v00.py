@@ -4,7 +4,7 @@
 # Import - 1 (trash)
 """
 Date : 10-2-2024
-Author : Unkown
+Author : Team-LD_3114
 Reason : As we import led_detection.py, I hope that we need to install the required libraries for the same.
 """
 from imutils import contours
@@ -18,7 +18,7 @@ import argparse
 # Import - 2 (standard imports)
 """
 Date : 10-02-2024
-Author : Unkown
+Author : Team-LD_3114
 Reason : we felt it required to import the required libraries for receive image and doing maths.
 """
 import math
@@ -31,7 +31,7 @@ import threading
 # Import - 3 (third-party imports)
 """
 Date : 10-02-2024
-Author : Unkown
+Author : Team-LD_3114
 Reason : Given by e-Yantra
 """
 import scipy.signal
@@ -49,7 +49,7 @@ import tf_transformations
 # Import - 4 (local imports (defined by us))
 """
 Date : 10-02-2024
-Author : Unkown
+Author : Team-LD_3114
 Reason : For simplicity, we use the local imports.
 """
 import json
@@ -58,7 +58,7 @@ import led_detection as led
 # Constant Variable
 """
 Last Update Date: 10-02-2024
-Author : Unkown
+Author : Team-LD_3114
 Reason : define the pitch's parameter value as it cann't travel very in x - axis
 Proposal : I think to reduce the the range of roll value min_roll = 1485 and max_roll = 1500 as system become slow and steady
 """
@@ -68,7 +68,7 @@ MAX_ROLL = 1600
 SUM_ERROR_ROLL_LIMIT = 30
 """
 Last Update Date: 10-02-2024
-Author : Unkown
+Author : Team-LD_3114
 Reason : define the pitch's parameter value as it cann't travel very in y - axis
 Proposal : I think to reduce the the range of roll value min_pitch = 1485 and max_pitch = 1500 as system become slow and steady
 """
@@ -78,7 +78,7 @@ MAX_PITCH = 1600
 SUM_ERROR_PITCH_LIMIT = 30
 """
 Last Update Date: 10-02-2024
-Author : Unkown
+Author : Team-LD_3114
 Reason : define the throttle's parameter value as it cann't travel very in z - axis
 Proposal : Look Nice no update required
 """
@@ -90,7 +90,7 @@ SUM_ERROR_THROTTLE_LIMIT = 10000
 # LANDING MACROS
 """
 Last Update Date: 10-02-2024
-Author : Unkown
+Author : Team-LD_3114
 Reason : Safe Landing
 Proposal : Reduce landing_decrement
 """
@@ -100,7 +100,7 @@ LANDING_DECREMENTER = 1
 # Global Variable 
 """
 Last Update Date: None
-Author : Unknown
+Author : Team-LD_3114
 Reason : Unkown
 Proposal : Recheck it
 """
